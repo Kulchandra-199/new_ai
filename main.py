@@ -1,145 +1,187 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
+import random
 import math
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
-from sklearn.manifold import TSNE
 
-# Multi-Head Attention Module
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import math
-import string
-
-class SimpleTokenizer:
-    """Basic character-level tokenizer for demo purposes"""
-    def __init__(self):
-        self.chars = string.printable
-        self.vocab_size = len(self.chars) + 2  # +2 for padding and unknown
-        self.char2idx = {c: i+2 for i, c in enumerate(self.chars)}
-        self.char2idx['<pad>'] = 0
-        self.char2idx['<unk>'] = 1
-        self.idx2char = {v: k for k, v in self.char2idx.items()}
-
-    def encode(self, text, max_len=50):
-        encoded = [self.char2idx.get(c, 1) for c in text[:max_len]]
-        return encoded + [0] * (max_len - len(encoded))
+class ConversationDataset(Dataset):
+    def __init__(self, conversations, tokenizer, max_length=128):
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.data = self.process_conversations(conversations)
+        
+    def process_conversations(self, conversations):
+        processed = []
+        for conv in conversations:
+            history = []
+            for i in range(0, len(conv)-1, 2):
+                input_text = " [SEP] ".join(history + [conv[i]])
+                target_text = conv[i+1]
+                processed.append((input_text, target_text))
+                history.append(conv[i])
+                history.append(conv[i+1])
+        return processed
     
-    def decode(self, tokens):
-        return ''.join([self.idx2char.get(t, '�') for t in tokens if t > 1])
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        input_text, target_text = self.data[idx]
+        input_ids = self.tokenizer.encode(input_text, max_length=self.max_length, padding='max_length', truncation=True)
+        target_ids = self.tokenizer.encode(target_text, max_length=self.max_length, padding='max_length', truncation=True)
+        return torch.tensor(input_ids), torch.tensor(target_ids)
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model, num_heads):
-        super().__init__()
-        assert d_model % num_heads == 0
-        self.d_model = d_model
-        self.num_heads = num_heads
-        self.d_k = d_model // num_heads
-        self.W_q = nn.Linear(d_model, d_model)
-        self.W_k = nn.Linear(d_model, d_model)
-        self.W_v = nn.Linear(d_model, d_model)
-        self.W_o = nn.Linear(d_model, d_model)
-
-    def scaled_dot_product_attention(self, Q, K, V, mask=None):
-        attention_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
-        if mask is not None:
-            attention_scores = attention_scores.masked_fill(mask == 0, -1e9)
-        attention_probs = F.softmax(attention_scores, dim=-1)
-        output = torch.matmul(attention_probs, V)
-        return output, attention_probs
-
-    def forward(self, Q, K, V, mask=None):
-        batch_size = Q.size(0)
-        Q = self.W_q(Q).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
-        K = self.W_k(K).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
-        V = self.W_v(V).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
-        output, attention_probs = self.scaled_dot_product_attention(Q, K, V, mask)
-        output = output.transpose(1, 2).contiguous().view(batch_size, -1, self.d_model)
-        return self.W_o(output), attention_probs
-
-class FeedForward(nn.Module):
-    def __init__(self, d_model, d_ff):
-        super().__init__()
-        self.linear1 = nn.Linear(d_model, d_ff)
-        self.linear2 = nn.Linear(d_ff, d_model)
-
-    def forward(self, x):
-        return self.linear2(F.relu(self.linear1(x)))
-
-class TransformerBlock(nn.Module):
-    def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
-        super().__init__()
-        self.attention = MultiHeadAttention(d_model, num_heads)
-        self.feed_forward = FeedForward(d_model, d_ff)
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x, mask=None):
-        attention_output, attention_probs = self.attention(x, x, x, mask)
-        x = self.norm1(x + self.dropout(attention_output))
-        ff_output = self.feed_forward(x)
-        x = self.norm2(x + self.dropout(ff_output))
-        return x, attention_probs
-
-class SimpleLanguageModel(nn.Module):
-    def __init__(self, vocab_size, d_model=128, num_heads=4, num_layers=4, d_ff=512, dropout=0.1):
+class DialogueTransformer(nn.Module):
+    def __init__(self, vocab_size, d_model=256, nhead=8, num_layers=4):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, d_model)
-        self.pos_encoding = nn.Parameter(torch.zeros(1000, d_model))
-        self.transformer_blocks = nn.ModuleList([
-            TransformerBlock(d_model, num_heads, d_ff, dropout)
-            for _ in range(num_layers)
-        ])
+        self.pos_encoder = PositionalEncoding(d_model)
+        self.transformer = nn.Transformer(
+            d_model=d_model,
+            nhead=nhead,
+            num_encoder_layers=num_layers,
+            num_decoder_layers=num_layers,
+            batch_first=True
+        )
         self.fc = nn.Linear(d_model, vocab_size)
-        self.dropout = nn.Dropout(dropout)
+def forward(self, src, tgt):
+    # Ensure matching batch sizes
+    src = self.pos_encoder(self.embedding(src))
+    tgt = self.pos_encoder(self.embedding(tgt))
+    
+    # Compute attention mask
+    tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size(1)).to(tgt.device)
+    
+    # Pass through transformer
+    output = self.transformer(src, tgt, tgt_mask=tgt_mask)
+    return self.fc(output)
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
 
-    def forward(self, x, mask=None):
-        seq_length = x.size(1)
-        x = self.embedding(x)
-        x = x + self.pos_encoding[:seq_length, :]
-        x = self.dropout(x)
-        all_attention_probs = []
-        for transformer in self.transformer_blocks:
-            x, attention_probs = transformer(x, mask)
-            all_attention_probs.append(attention_probs.detach())
-        output = self.fc(x)
-        return output, all_attention_probs
+    def forward(self, x):
+        return x + self.pe[:x.size(1), :]
 
-def create_padding_mask(seq):
-    return (seq != 0).unsqueeze(1).unsqueeze(2)
-
-def chat(model, tokenizer, max_length=50):
-    print("Start chatting with the AI (type 'quit' to exit)")
-    while True:
-        input_text = input("You: ")
-        if input_text.lower() == 'quit':
-            break
+class ConversationTrainer:
+    def __init__(self, model, tokenizer):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+        self.criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)
         
-        # Encode input
-        input_ids = tokenizer.encode(input_text, max_length)
-        input_tensor = torch.tensor([input_ids])
+    def train(self, dataset, epochs=10, batch_size=8):
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        self.model.train()
+        
+        for epoch in range(epochs):
+            total_loss = 0
+            for src, tgt in loader:
+                self.optimizer.zero_grad()
+                
+                # Slice off the last token from target for teacher forcing
+                output = self.model(src, tgt[:, :-1])
+                
+                # Reshape for loss calculation
+                loss = self.criterion(
+                    output.reshape(-1, output.size(-1)), 
+                    tgt[:, 1:].reshape(-1)
+                )
+                
+                loss.backward()
+                self.optimizer.step()
+                total_loss += loss.item()
+            
+            print(f"Epoch {epoch+1} Loss: {total_loss/len(loader):.4f}")
+
+            
+class SimpleTokenizer:
+    def __init__(self, vocab):
+        self.vocab = {word: idx+4 for idx, word in enumerate(vocab)}
+        self.special_tokens = {
+            '[PAD]': 0,
+            '[UNK]': 1,
+            '[CLS]': 2,
+            '[SEP]': 3
+        }
+        self.vocab.update(self.special_tokens)
+        self.inverse_vocab = {v: k for k, v in self.vocab.items()}
+        self.pad_token_id = self.special_tokens['[PAD]']
+        
+    def encode(self, text, max_length=128, padding=True, truncation=True):
+        tokens = [self.vocab.get(word, self.special_tokens['[UNK]']) 
+                for word in text.split()]
+        
+        if truncation and len(tokens) > max_length:
+            tokens = tokens[:max_length]
+            
+        if padding and len(tokens) < max_length:
+            tokens += [self.pad_token_id] * (max_length - len(tokens))
+            
+        return tokens
+    
+    def decode(self, token_ids):
+        return ' '.join([self.inverse_vocab.get(tid, '[UNK]') for tid in token_ids])
+
+# Example conversation data
+conversations = [
+    [
+        "Hello, how are you?",
+        "I'm doing well, thank you!",
+        "What's your name?",
+        "I'm an AI assistant. How can I help you today?"
+    ],
+    [
+        "Tell me a joke",
+        "Why don't scientists trust atoms? Because they make up everything!",
+        "That's funny!",
+        "Glad you liked it! Want another one?"
+    ]
+]
+
+# Initialize components
+tokenizer = SimpleTokenizer(vocab=["Hello", "how", "are", "you", "I'm", "doing", "well", "thank", 
+                                 "What's", "your", "name", "AI", "assistant", "help", "today",
+                                 "Tell", "me", "a", "joke", "Why", "don't", "scientists", "trust",
+                                 "atoms", "Because", "they", "make", "up", "everything", "That's",
+                                 "funny", "Glad", "you", "liked", "it", "Want", "another", "one"])
+
+dataset = ConversationDataset(conversations, tokenizer)
+model = DialogueTransformer(vocab_size=len(tokenizer.vocab))
+trainer = ConversationTrainer(model, tokenizer)
+
+# Train the model
+trainer.train(dataset, epochs=20, batch_size=2)
+
+# Conversation interface
+def chat(model, tokenizer, max_length=50):
+    history = []
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() == 'quit':
+            break
+            
+        history.append(user_input)
+        context = " [SEP] ".join(history[-3:])  # Keep last 3 turns
+        input_ids = tokenizer.encode(context, max_length=tokenizer.max_length)
         
         # Generate response
+        model.eval()
         with torch.no_grad():
-            logits, _ = model(input_tensor)
-            # Simple random sampling from last output
-            probs = F.softmax(logits[0, -1], dim=-1)
-            response_id = torch.multinomial(probs, num_samples=1).item()
-            response = tokenizer.decode([response_id])
+            output = model(torch.tensor([input_ids]), torch.tensor([[tokenizer.special_tokens['[CLS]']]]))
+            response_ids = output.argmax(-1).squeeze().tolist()
+            response = tokenizer.decode(response_ids).split('[SEP]')[0].strip()
             
-        print(f"AI: {response}\n")
+        print(f"AI: {response}")
+        history.append(response)
 
-if __name__ == "__main__":
-    # Initialize components
-    tokenizer = SimpleTokenizer()
-    model = SimpleLanguageModel(tokenizer.vocab_size)
-    
-    # Start chat session
-    chat(model, tokenizer)
+# Start chatting
+chat(model, tokenizer)
 # print(f"Output shape: {output.shape}")
 
 # # Visualization Examples

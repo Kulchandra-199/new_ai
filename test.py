@@ -13,6 +13,7 @@ training_data = {
 def embed_text(text):
     return np.array([ord(c) for c in text.lower()]) / 255  # Normalize ASCII values
 
+
 # Compute similarity using cosine similarity
 def cosine_similarity(vec1, vec2):
     if np.linalg.norm(vec1) == 0 or np.linalg.norm(vec2) == 0:
