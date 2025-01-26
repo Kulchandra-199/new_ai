@@ -108,7 +108,7 @@ class SimpleLanguageModel(nn.Module):
             all_attention_probs.append(attention_probs.detach())
         output = self.fc(x)
         return output, all_attention_probs
-
+ 
 def create_padding_mask(seq):
     return (seq != 0).unsqueeze(1).unsqueeze(2)
 
