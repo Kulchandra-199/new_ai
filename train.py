@@ -31,6 +31,7 @@ def load_model_and_tokenizer(model_name):
     )
     
     return model, tokenizer
+
 def configure_lora(model, rank: int = 16) -> PeftModel:
     """Configure and apply LoRA to the model."""
     model = prepare_model_for_kbit_training(model)
@@ -136,3 +137,32 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+# ## Todos
+
+#     1. **GPU Utilization**: The current code uses device_map="cpu", which isn't efficient. They should use GPU if available. Maybe the user didn't set it because of constraints, but in practice, you'd want to use CUDA.
+
+# 2. **Quantization**: The code doesn't mention 4-bit or 8-bit quantization, which can reduce memory usage. Using bitsandbytes for quantization could help with GPU constraints.
+
+# 3. **Dataset Splitting**: The code loads the dataset but doesn't split it into training and validation sets. Adding a validation split would help in evaluating the model's performance during training.
+
+# 4. **Gradient Checkpointing**: To save memory, enabling gradient checkpointing could be beneficial, especially on smaller GPUs.
+
+# 5. **Hyperparameter Tuning**: The current hyperparameters are set, but in practice, tuning them based on the model's performance is necessary. For example, adjusting learning rate, batch size, or LoRA rank.
+
+# 6. **Monitoring and Logging**: The code uses report_to="none", but using tools like Weights & Biases or TensorBoard for logging would provide better insights.
+
+# 7. **Evaluation**: The setup includes evaluation_strategy but doesn't provide an eval_dataset. The user should split the dataset and pass the evaluation data to the Trainer.
+
+# 8. **Safety and Model Checks**: Adding steps like checkpoint saving, model validation, and testing after training to ensure the model works as expected.
+
+# 9. **Error Handling**: The code lacks error handling for cases like missing files, incompatible models, or tokenization errors.
+
+# 10. **Deployment Considerations**: After saving the adapters, instructions on how to merge them with the base model or use them for inference might be needed.
+
+# 11. **Memory Optimization Techniques**: Besides LoRA, using methods like flash attention, mixed precision training (though fp16 is already there), or offloading parameters could help with GPU constraints.
+
+# 12. **Dataset Preprocessing**: More detailed preprocessing steps, like filtering, balancing, or augmenting data, might be necessary depending on the dataset quality.
